@@ -18,6 +18,7 @@
 package org.pentaho.osgi.platform.webjars;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang.StringUtils;
 import org.osgi.framework.Constants;
 import org.pentaho.js.require.RequireJsGenerator;
 import org.slf4j.Logger;
@@ -32,6 +33,8 @@ import java.io.PipedOutputStream;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -324,10 +327,31 @@ public class WebjarsURLConnection extends URLConnection {
 
       if ( requireConfig != null ) {
         try {
+          
+          if ( isNpmWebjar || isBowerWebjar) {
+	          Object obj = requireConfig.getRequireConfig().get("packages");
+	          if (obj != null) {
+		          List<Object> packages = (List<Object>)obj;
+		          for (Object pck : packages) {
+		        	  if (pck instanceof HashMap<?, ?>) {
+		        		  String mainM = ((HashMap<String, String>)pck).get("main");
+		        		  if (mainM != null && !mainM.isEmpty()) {
+			        		  boolean isMinified = findMinModule( url, mainM );
+			        		  if (isMinified && !mainM.endsWith(".min")) {
+			        			  ((HashMap<String, String>)pck).put("main", mainM + ".min");
+			        			  System.out.println("---" + mainM);
+			        		  }
+		        		  }
+		        	  }
+		          }
+	          }
+          }
+
+          
           final String exports = !isAmdPackage && !exportedGlobals.isEmpty() ? exportedGlobals.get( 0 ) : null;
           final RequireJsGenerator.ModuleInfo moduleInfo =
               requireConfig.getConvertedConfig( artifactInfo, isAmdPackage, exports );
-
+          
           addRequireJsToJar( moduleInfo.exportRequireJs(), jarOutputStream );
 
           // Add Blueprint file if we found a require-js configuration.
@@ -458,5 +482,35 @@ public class WebjarsURLConnection extends URLConnection {
     jarOutputStream.closeEntry();
   }
 
+  private boolean findMinModule( URL url, String moduleName ) throws IOException {
+	Pattern p =  Pattern.compile( "META-INF/resources/webjars/([^/]+)/([^/]+)/"+ moduleName + "\\.min\\..*" );
+	  
+    URLConnection urlConnection = url.openConnection();
+    urlConnection.connect();
+
+    InputStream inputStream = urlConnection.getInputStream();
+    JarInputStream jarInputStream = new JarInputStream( inputStream );
+
+    try {
+      ZipEntry entry;
+      while ( ( entry = jarInputStream.getNextJarEntry() ) != null ) {
+        String name = entry.getName();
+
+        Matcher matcher = p.matcher( name );
+        if ( matcher.matches() ) {
+          return true;
+        }
+      }
+      return false;
+
+    } finally {
+      logger.debug( "Closing JarInputStream." );
+      try {
+        jarInputStream.close();
+      } catch ( IOException ioexception ) {
+        logger.debug( "Tried to close JarInputStream, but it was already closed.", ioexception );
+      }
+    }
+  }
 
 }

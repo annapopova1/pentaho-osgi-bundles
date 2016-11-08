@@ -147,6 +147,10 @@ public class RequireJsGenerator {
   public ModuleInfo getModuleInfo() {
     return this.moduleInfo;
   }
+  
+  public Map<String, Object> getRequireConfig() {
+	return this.requireConfig;
+  }
 
   public ModuleInfo getConvertedConfig( ArtifactInfo artifactInfo ) throws ParseException {
     return this.getConvertedConfig( artifactInfo, true, null );
